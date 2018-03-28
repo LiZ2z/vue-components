@@ -14,9 +14,9 @@
         <label class="update-label" for="update-input">+</label>
       </div>
 
-      <div class="grid" v-for="(img, i) in imgs" :key='i' v-if="img">
+      <div class="grid" v-for="(img, i) in imgs" :key='i' >
         <div class="preview-img-wrap" @click="remove(i)">
-          <img class="preview-img" :src="img.src" :alt="img.alt">
+          <img class="preview-img" :src="img"  v-if="img">
           <span class="remove-btn">+</span>
         </div>
       </div>
@@ -33,8 +33,7 @@
     name: 'file-update',
     data () {
       return {
-        imgs: [],
-        previews: []
+        imgs: []
       }
     },
     mounted() {
@@ -46,38 +45,44 @@
     },
     methods: {
       uploadImg (e) {
-        const len = this.imgs.length
         let newImgs = [...e.target.files]
+        const imgs = this.imgs
+        const oldLen = imgs.length
+        // 限制用户上传图片数量, 最多9张
+        newImgs = newImgs.slice(0, 9 - oldLen)
 
-        newImgs = newImgs.slice(0, 9 - len)
+        if (newImgs.length) {
+          // 记录新增上传列表
+          this.newImgs = this.newImgs ? this.newImgs.concat(newImgs) : newImgs
 
-        this.handlerAdd(newImgs)
-        // this.handlerPreview(newImgs)
+          // 先记录一下当前长度, 因为是异步处理图片,当图片处理完成后,
+          // 根据此长度将图片插入相应位置, 以保证上传的图片顺序跟用户选择的图片顺序一致
+          if (!this.len) { this.len =  oldLen }
+          const arr = new Array(newImgs.length)
+          this.imgs = imgs.concat(arr)
+          this.getOrientation(0)
+        }
+
       },
-      handlerAdd(imgs) {
-        let imgFile = null, blobSrc = ''
-        const oldLen = this.imgs.length
-        const len = imgs.length
-        let arr = new Array(len)
+      // 获取图片拍摄时的旋转角度
+      getOrientation(i) {
 
-        this.imgs = this.imgs.concat(arr)
+        const imgFile = this.newImgs[i]
+        const blobSrc = window.URL.createObjectURL(imgFile)
 
-        for(let i = 0; i < len; i++) {
-          imgFile = imgs[i]
-          blobSrc = window.URL.createObjectURL(imgFile)
+        // 调用EXIF库 获取图片信息
+        this.EXIF.getData(imgFile, function(vm) {
+          return function () {
+            // 压缩图片
+            vm.compress(blobSrc, vm.EXIF.getTag(this, 'Orientation'), i)
+          }
+        }(this))
 
-          // 获取图片拍摄时的旋转角度
-          this.EXIF.getData(imgFile, (function(vm){
-            return function () {
-              // 压缩图片
-              vm.compress(blobSrc, vm.EXIF.getTag (this, 'Orientation'), oldLen + i)
-            }
-          })(this))
-
-        } // END for
       },
+      // 压缩图片
       compress(src, ori, i) {
         let img = new Image()
+        img.crossOrigin = "anonymous"
         img.src = src
         img.onload = (function (vm, ori, i) {
           return function () {
@@ -91,11 +96,10 @@
 
             canvas.width = w
             canvas.height = h
-
             let deg = 0,
               drawH = h,
               drawW = w
-
+            // 矫正图片旋转方向
             switch (ori) {
 
               case 3:
@@ -118,45 +122,65 @@
               default:
                 break;
             }
-
+            // ctx.save()
             ctx.rotate(deg)
             ctx.drawImage(this,0,0,drawW, drawH)
+            // ctx.restore()
 
-            vm.imgs.splice(i, 1, {
-              src: canvas.toDataURL('image/jpeg')
-            })
+            vm.imgs.splice((vm.len + i), 1, canvas.toDataURL('image/jpeg') )
+
+            // 一次选中多个上传文件, 循环调用
+            if (i < vm.newImgs.length - 1) {
+              vm.getOrientation(++i)
+            } else {
+              vm.len = 0
+              vm.newImgs = []
+            }
+
 
           }
         })(this, ori, i)
 
       }, // END compress  method
       remove(i) {
-        this.imgs.splice(i, 1)
-        this.previews.splice(i, 1)
-      },
-      submit(e) {
-        /*this.$axios({
-          methods: 'post',
-          url: '/img',
-          data: {
-            fff: this.imgs[0]
-          },
-          headers: {'enctype': 'multipart/form-data'}
-        })
-        .then(res => {
-          alert(res.data)
-        })*/
-        let xhr = new XMLHttpRequest()
-        let formData = new FormData();
-        let arr = this.imgs
-        for(let i = 0,l = arr.length; i < l; i ++) {
-          formData.append('fff', arr[i]);
-          console.log(arr[i])
+        // 正在处理上传图片的时候不允许删除
+        if (!this.newImgs || !this.newImgs.length) {
+          this.imgs.splice(i, 1)
         }
-        // xhr.onload = uploadSuccess;
-        // xhr.upload.onprogress = setProgress;
+      },
+      base64ToBinary(v) {
+        const arr = v.split(',')
+        const dataURL = arr[1]
+        const mime = arr[0].match(/:(.*);/)[1]
+
+        let i = dataURL.length
+        const u8arr = new Uint8Array(i)
+
+        while (i--) {
+          u8arr[i] = dataURL.charCodeAt(i)
+        }
+        return new Blob(u8arr, {type: mime})
+      },
+      submit() {
+        let imgs = this.imgs
+        let formData = new FormData();
+        for(let i = 0,l = imgs.length; i < l; i ++) {
+          formData.append('fff', this.base64ToBinary(imgs[i]) );
+        }
+
+        let xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function () {
+          if(xhr.readyState === 4&&xhr.status===200 ) {
+            console.log(xhr.responseText)
+
+            let img = new Image()
+            img.src= xhr.responseText
+            document.body.appendChild(img)
+          }
+        }
         xhr.open('post', '/img', true);
         xhr.send(formData);
+
       }
     }
 
