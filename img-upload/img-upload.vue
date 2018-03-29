@@ -20,8 +20,8 @@
           <span class="remove-btn">+</span>
         </div>
       </div>
-
     </div>
+
     <canvas ref="canvas" width="750" class="compress-canvas"></canvas>
 
   </div>
@@ -34,6 +34,16 @@
     data () {
       return {
         imgs: []
+      }
+    },
+    props:{
+      ratio: {
+        type: Number,
+        default: 0.2
+      },
+      max: {
+        type: Number,
+        default: 9
       }
     },
     mounted() {
@@ -49,12 +59,10 @@
         const imgs = this.imgs
         const oldLen = imgs.length
         // 限制用户上传图片数量, 最多9张
-        newImgs = newImgs.slice(0, 9 - oldLen)
-
+        newImgs = newImgs.slice(0, this.max - oldLen)
         if (newImgs.length) {
           // 记录新增上传列表
           this.newImgs = this.newImgs ? this.newImgs.concat(newImgs) : newImgs
-
           // 先记录一下当前长度, 因为是异步处理图片,当图片处理完成后,
           // 根据此长度将图片插入相应位置, 以保证上传的图片顺序跟用户选择的图片顺序一致
           if (!this.len) { this.len =  oldLen }
@@ -62,14 +70,11 @@
           this.imgs = imgs.concat(arr)
           this.getOrientation(0)
         }
-
       },
       // 获取图片拍摄时的旋转角度
       getOrientation(i) {
-
         const imgFile = this.newImgs[i]
         const blobSrc = window.URL.createObjectURL(imgFile)
-
         // 调用EXIF库 获取图片信息
         this.EXIF.getData(imgFile, function(vm) {
           return function () {
@@ -77,7 +82,6 @@
             vm.compress(blobSrc, vm.EXIF.getTag(this, 'Orientation'), i)
           }
         }(this))
-
       },
       // 压缩图片
       compress(src, ori, i) {
@@ -86,22 +90,18 @@
         img.src = src
         img.onload = (function (vm, ori, i) {
           return function () {
-            this.onload = null
             window.URL.revokeObjectURL(this.src)
-
-            const w = 750,
-              h = (this.height/this.width) * w,
-              canvas = vm.canvas,
-              ctx = vm.ctx
-
+            const w = this.width,
+                  h = this.height,
+                  canvas = vm.canvas,
+                  ctx = vm.ctx
             canvas.width = w
             canvas.height = h
             let deg = 0,
-              drawH = h,
-              drawW = w
+                drawH = h,
+                drawW = w
             // 矫正图片旋转方向
             switch (ori) {
-
               case 3:
                 deg=Math.PI
                 drawW = -w
@@ -124,11 +124,13 @@
             }
             // ctx.save()
             ctx.rotate(deg)
+            // png图片在转成jpeg时, png的透明部分在canvas中表现为黑色,
+            // 这里把canvas底色设置成白色
+            ctx.fillStyle = "#fff"
+            ctx.fillRect(0, 0, drawW, drawW)
             ctx.drawImage(this,0,0,drawW, drawH)
             // ctx.restore()
-
-            vm.imgs.splice((vm.len + i), 1, canvas.toDataURL('image/jpeg') )
-
+            vm.imgs.splice((vm.len + i), 1, canvas.toDataURL('image/jpeg', vm.ratio) )
             // 一次选中多个上传文件, 循环调用
             if (i < vm.newImgs.length - 1) {
               vm.getOrientation(++i)
@@ -136,11 +138,8 @@
               vm.len = 0
               vm.newImgs = []
             }
-
-
           }
         })(this, ori, i)
-
       }, // END compress  method
       remove(i) {
         // 正在处理上传图片的时候不允许删除
@@ -152,44 +151,22 @@
         const arr = v.split(',')
         const dataURL = arr[1]
         const mime = arr[0].match(/:(.*);/)[1]
-
         let i = dataURL.length
         const u8arr = new Uint8Array(i)
-
         while (i--) {
           u8arr[i] = dataURL.charCodeAt(i)
         }
         return new Blob(u8arr, {type: mime})
       },
       submit() {
-        let imgs = this.imgs
-        let formData = new FormData();
-        for(let i = 0,l = imgs.length; i < l; i ++) {
-          formData.append('fff', this.base64ToBinary(imgs[i]) );
-        }
-
-        let xhr = new XMLHttpRequest()
-        xhr.onreadystatechange = function () {
-          if(xhr.readyState === 4&&xhr.status===200 ) {
-            console.log(xhr.responseText)
-
-            let img = new Image()
-            img.src= xhr.responseText
-            document.body.appendChild(img)
-          }
-        }
-        xhr.open('post', '/img', true);
-        xhr.send(formData);
-
+        this.$emit('sumbit', this.imgs)
       }
     }
-
   }
 </script>
 
 <style >
   .compress-canvas{display:none;}
-
   .clearfix:after{
     display: block;
     content: '\0020';
@@ -202,14 +179,12 @@
   }
   .update-btn{
     float:right;
-    background: #000000;
+    background: #000;
     color:#fff;
     border:none;
     padding:4px 10px;
     border-radius:4px;
   }
-
-
   .update-label{
     display: block;
     width:60px;
@@ -222,7 +197,6 @@
     line-height:58px;
   }
   #update-input{display: none;}
-
   #update-input:disabled+.update-label{
     border: 1px dashed #aaa;
     color:#aaa;
@@ -230,13 +204,11 @@
   .file-update-bd{
     padding:20px 0;
   }
-
   .grid{
     width:20%;
     float:left;
     margin: 5px 0;
   }
-
   .preview-img-wrap{
     overflow: hidden;
     height:60px;
