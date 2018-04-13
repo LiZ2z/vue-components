@@ -22,7 +22,7 @@
       </div>
     </div>
 
-    <canvas ref="canvas" width="750" class="compress-canvas"></canvas>
+  
 
   </div>
 </template>
@@ -48,7 +48,7 @@
     },
     mounted() {
       window.URL = window.URL || window.webkitURL
-      let canvas = this.$refs.canvas
+      let canvas = document.createElement('canvas')
       this.canvas = canvas
       this.ctx = canvas.getContext('2d')
       EXIF.call(this)
@@ -63,7 +63,7 @@
         if (newImgs.length) {
           // 记录新增上传列表
           this.newImgs = this.newImgs ? this.newImgs.concat(newImgs) : newImgs
-          // 先记录一下当前长度, 因为是异步处理图片,当图片处理完成后,
+          // 先记录一下当前文件列表长度, 因为是异步处理图片,当图片处理完成后,
           // 根据此长度将图片插入相应位置, 以保证上传的图片顺序跟用户选择的图片顺序一致
           if (!this.len) { this.len =  oldLen }
           const arr = new Array(newImgs.length)
@@ -159,14 +159,18 @@
         return new Blob(u8arr, {type: mime})
       },
       submit() {
-        this.$emit('sumbit', this.imgs)
+        let imgs = this.imgs,
+        base64ToBinary = this.base64ToBinary;
+        for(let i = 0, len = imgs.length; i < len; i++) {
+          imgs[i] = base64ToBinary(imgs[i])
+        }
+        this.$emit('sumbit', imgs)
       }
     }
   }
 </script>
 
 <style >
-  .compress-canvas{display:none;}
   .clearfix:after{
     display: block;
     content: '\0020';
