@@ -156,6 +156,8 @@
         while (i--) {
           u8arr[i] = dataURL.charCodeAt(i)
         }
+        //Blob 兼容性  window.BlobBuilder
+        // window.WebKitBlobBuilder
         return new Blob(u8arr, {type: mime})
       },
       submit() {
