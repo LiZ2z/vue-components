@@ -1,3 +1,5 @@
+// 老版本安卓, formData不能上传blog需要shim
+// 老版本浏览器 不支持Blob   需要使用带前缀的  BlobBuilder
 <template>
   <div class="file-update">
 
