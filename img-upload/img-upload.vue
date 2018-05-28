@@ -160,7 +160,7 @@
         }
         //Blob 兼容性 WebkitBlob  或 .. window.BlobBuilder
         // window.WebKitBlobBuilder
-        return new Blob(u8arr, {type: mime})
+        return new Blob([u8arr], {type: mime})
       },
       submit() {
         let imgs = this.imgs,
